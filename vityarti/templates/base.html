@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ app_title }}</title>
+  <meta name="description" content="CampusBite - Next-generation smart canteen management, live food ordering, kitchen POS, and analytics system.">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+  {% include "inline_style.css" ignore missing %}
+  </style>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍔</text></svg>">
+</head>
+<body>
+
+  <!-- Top Global Navigation -->
+  <header>
+    <nav class="navbar">
+      <a href="/" class="brand-wrapper" id="brand-logo">
+        <div class="brand-icon">🍔</div>
+        <div class="brand-text">
+          <h1>CampusBite</h1>
+          <span>Smart Canteen Hub</span>
+        </div>
+      </a>
+
+      <!-- Page Navigation Links -->
+      <ul class="nav-links">
+        <li><a href="/" class="nav-link {% if request.path == '/' %}active{% endif %}" id="nav-menu">🍽️ Menu</a></li>
+        <li><a href="/kitchen" class="nav-link {% if request.path == '/kitchen' %}active{% endif %}" id="nav-kitchen">👨‍🍳 Kitchen KDS</a></li>
+        <li><a href="/admin" class="nav-link {% if request.path == '/admin' %}active{% endif %}" id="nav-admin">📊 Admin & POS</a></li>
+        <li><a href="/my-orders" class="nav-link {% if request.path == '/my-orders' %}active{% endif %}" id="nav-orders">🧾 My Orders</a></li>
+      </ul>
+
+      <!-- Persona Switcher, Wallet Balance & Cart -->
+      <div class="nav-actions">
+        <!-- Live Persona / Role Switcher for seamless grading & evaluation -->
+        <div class="role-switcher-pill" title="Switch user role for testing and viva demonstration">
+          <span style="font-size: 0.85rem;">👤 Role:</span>
+          <select id="persona-selector" onchange="switchDemoPersona(this.value)">
+            <option value="student" {% if active_role == 'student' %}selected{% endif %}>Student (Aarav)</option>
+            <option value="faculty" {% if active_role == 'faculty' %}selected{% endif %}>Faculty (Dr. Priya)</option>
+            <option value="staff" {% if active_role == 'staff' %}selected{% endif %}>Staff (Chef Ramesh)</option>
+            <option value="admin" {% if active_role == 'admin' %}selected{% endif %}>Admin (Vikram)</option>
+          </select>
+        </div>
+
+        <!-- Student Digital Wallet Widget -->
+        <button class="wallet-badge" id="wallet-btn" onclick="openWalletModal()" title="Click to view or recharge balance">
+          <span>💳</span>
+          <span id="nav-wallet-balance">₹{{ "%.2f"|format(current_user.wallet_balance if current_user else 450.00) }}</span>
+          <span style="font-size: 0.7rem; background: rgba(16,185,129,0.25); padding: 2px 6px; border-radius: 4px;">+Topup</span>
+        </button>
+
+        <!-- Cart Flyout Toggle Button -->
+        <button class="cart-toggle-btn" id="cart-toggle-btn" onclick="toggleCartDrawer()" aria-label="Open Shopping Cart">
+          🛒
+          <span class="cart-count-badge" id="cart-count">0</span>
+        </button>
+      </div>
+    </nav>
+  </header>
+
+  <!-- Main Content Block -->
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Slide-out Cart Drawer -->
+  <div class="cart-overlay" id="cart-overlay" onclick="toggleCartDrawer()"></div>
+  <aside class="cart-drawer" id="cart-drawer" aria-label="Shopping Cart">
+    <div class="cart-header">
+      <h3>🛒 Your Meal Tray</h3>
+      <button class="btn-close-cart" onclick="toggleCartDrawer()" aria-label="Close cart">✕</button>
+    </div>
+    
+    <div class="cart-items-list" id="cart-items-container">
+      <div class="cart-empty-state">
+        <div style="font-size: 3rem;">🥗</div>
+        <p style="font-weight: 600; color: #fff;">Your tray is empty</p>
+        <span style="font-size: 0.85rem;">Browse the delicious menu and add freshly made meals or beverages.</span>
+      </div>
+    </div>
+
+    <div class="cart-footer" id="cart-footer" style="display: none;">
+      <div class="cart-summary-line">
+        <span>Items Subtotal</span>
+        <span id="cart-subtotal">₹0.00</span>
+      </div>
+      <div class="cart-summary-line">
+        <span>Campus Tax (0%)</span>
+        <span style="color: var(--accent-emerald);">FREE</span>
+      </div>
+      <div class="cart-summary-line cart-summary-total">
+        <span>Total Payable</span>
+        <span id="cart-total-payable">₹0.00</span>
+      </div>
+
+      <textarea class="special-instructions-input" id="special-instructions" rows="2" placeholder="Special kitchen instructions (e.g. less spicy, extra mayo, no onions)..."></textarea>
+
+      <button class="btn-checkout" id="btn-checkout" onclick="checkoutOrder()">
+        <span>⚡ Place Order & Generate Token</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Digital Token & Receipt Modal -->
+  <div class="modal-overlay" id="token-modal">
+    <div class="modal-card">
+      <div class="receipt-ticket" id="printable-receipt">
+        <div class="receipt-header">
+          <h4>CAMPUSBITE CANTEEN</h4>
+          <p style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">Smart Order Token & Payment Slip</p>
+          <p style="font-size: 0.72rem; color: #64748b;" id="receipt-date-time">--</p>
+        </div>
+
+        <div class="receipt-token-box">
+          <div class="receipt-token-lbl">Order Pickup Token</div>
+          <div class="receipt-token-num" id="receipt-token-num">TK-000</div>
+          <div style="font-size: 0.8rem; color: #059669; font-weight: 700;">Status: Sent to Kitchen</div>
+        </div>
+
+        <div style="font-size: 0.82rem; margin-bottom: 0.8rem;">
+          <div><strong>Order Ref:</strong> <span id="receipt-order-ref">--</span></div>
+          <div><strong>Customer:</strong> <span id="receipt-customer-name">--</span></div>
+          <div><strong>Payment:</strong> <span style="color: #059669;">Digital Student Wallet (Paid)</span></div>
+        </div>
+
+        <table class="receipt-items-table">
+          <thead>
+            <tr style="text-align: left; color: #64748b; font-size: 0.75rem;">
+              <th>Item</th>
+              <th style="text-align: center;">Qty</th>
+              <th style="text-align: right;">Price</th>
+            </tr>
+          </thead>
+          <tbody id="receipt-items-body">
+            <!-- Dynamically populated -->
+          </tbody>
+          <tfoot>
+            <tr class="receipt-total-row">
+              <td colspan="2" style="padding-top: 0.6rem;">TOTAL PAID</td>
+              <td style="text-align: right; padding-top: 0.6rem;" id="receipt-total-price">₹0.00</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <!-- Realistic QR Code Simulation -->
+        <div class="receipt-qr-sim" title="Scan at canteen counter for instant order verification">
+          <svg width="100" height="100" viewBox="0 0 100 100">
+            <!-- Distinct QR pattern graphics -->
+            <rect width="100" height="100" fill="#ffffff" />
+            <rect x="5" y="5" width="30" height="30" fill="#0f172a" />
+            <rect x="10" y="10" width="20" height="20" fill="#ffffff" />
+            <rect x="14" y="14" width="12" height="12" fill="#0f172a" />
+            <rect x="65" y="5" width="30" height="30" fill="#0f172a" />
+            <rect x="70" y="10" width="20" height="20" fill="#ffffff" />
+            <rect x="74" y="14" width="12" height="12" fill="#0f172a" />
+            <rect x="5" y="65" width="30" height="30" fill="#0f172a" />
+            <rect x="10" y="70" width="20" height="20" fill="#ffffff" />
+            <rect x="14" y="74" width="12" height="12" fill="#0f172a" />
+            <rect x="42" y="10" width="6" height="12" fill="#0f172a" />
+            <rect x="50" y="24" width="8" height="8" fill="#0f172a" />
+            <rect x="42" y="42" width="16" height="16" fill="#0f172a" />
+            <rect x="68" y="45" width="14" height="6" fill="#0f172a" />
+            <rect x="72" y="68" width="18" height="18" fill="#0f172a" />
+            <rect x="45" y="72" width="8" height="14" fill="#0f172a" />
+          </svg>
+        </div>
+        <p style="text-align: center; font-size: 0.68rem; color: #64748b; margin-top: 6px;">Show token number at Pickup Counter</p>
+      </div>
+
+      <div class="receipt-actions">
+        <button class="btn-print" onclick="window.print()">🖨️ Print Token Slip</button>
+        <button class="btn-dismiss" onclick="closeTokenModal()">Dismiss</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Wallet Instant Top-Up Modal -->
+  <div class="modal-overlay" id="wallet-modal">
+    <div class="modal-card" style="padding: 2rem;">
+      <h3 style="font-family: var(--font-heading); font-size: 1.4rem; color: #fff; margin-bottom: 0.5rem;">💳 Student Wallet Recharge</h3>
+      <p style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 1.5rem;">Instant demo top-up via UPI / Campus Card</p>
+
+      <div style="background: rgba(255,255,255,0.05); padding: 1.2rem; border-radius: var(--radius-md); border: 1px solid var(--border-glass); margin-bottom: 1.5rem;">
+        <div style="font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase;">Current Balance</div>
+        <div style="font-family: var(--font-heading); font-size: 2rem; font-weight: 800; color: var(--accent-emerald);" id="modal-current-balance">₹450.00</div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.6rem; margin-bottom: 1.5rem;">
+        <button type="button" class="diet-tag-btn" onclick="selectTopupAmount(50)">+₹50</button>
+        <button type="button" class="diet-tag-btn" onclick="selectTopupAmount(100)">+₹100</button>
+        <button type="button" class="diet-tag-btn" onclick="selectTopupAmount(200)">+₹200</button>
+        <button type="button" class="diet-tag-btn active" onclick="selectTopupAmount(500)">+₹500</button>
+      </div>
+
+      <div style="margin-bottom: 1.5rem;">
+        <label style="font-size: 0.82rem; color: var(--text-secondary); display: block; margin-bottom: 0.4rem;">Or Enter Custom Amount (₹)</label>
+        <input type="number" id="custom-recharge-amount" value="500" min="10" max="5000" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border-glass); color: #fff; padding: 0.75rem 1rem; border-radius: var(--radius-md); font-size: 1.1rem; font-weight: 700; outline: none;">
+      </div>
+
+      <div style="display: flex; gap: 0.8rem;">
+        <button class="btn-checkout" onclick="executeWalletRecharge()" style="flex: 2;">⚡ Recharge Instantly</button>
+        <button class="btn-close-cart" onclick="closeWalletModal()" style="width: auto; padding: 0 1.2rem; border-radius: var(--radius-md); font-size: 0.9rem;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Global JavaScript Application -->
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  {% block scripts %}{% endblock %}
+
+</body>
+</html>

@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="admin-container" style="max-width: 1100px;">
+  <div class="admin-header">
+    <div>
+      <h2 style="font-family: var(--font-heading); font-size: 2rem; font-weight: 800; color: #fff;">
+        🧾 My Orders & Digital Tokens
+      </h2>
+      <p style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 4px;">
+        Track live canteen order statuses, view digital pickup tokens, and review past receipts.
+      </p>
+    </div>
+
+    <button class="diet-tag-btn active" onclick="loadUserOrders()">
+      🔄 Refresh Orders
+    </button>
+  </div>
+
+  <div id="orders-list-container" style="display: flex; flex-direction: column; gap: 1.2rem;">
+    <!-- Populated asynchronously via JS -->
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  loadUserOrders();
+});
+
+async function loadUserOrders() {
+  const container = document.getElementById('orders-list-container');
+  container.innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 2rem;">Loading your orders...</div>';
+
+  try {
+    const res = await fetch('/api/orders/my-orders');
+    const data = await res.json();
+    if (!data.success || !data.orders || data.orders.length === 0) {
+      container.innerHTML = `
+        <div class="data-table-card" style="text-align: center; padding: 3rem;">
+          <div style="font-size: 3rem; margin-bottom: 0.8rem;">🍽️</div>
+          <h3 style="color: #fff; margin-bottom: 0.4rem;">No Orders Yet</h3>
+          <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">You have not placed any orders today. Ready for a hot snack or coffee?</p>
+          <a href="/" class="btn-add-cart" style="display: inline-flex; text-decoration: none;">Browse Canteen Menu</a>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = data.orders.map(order => {
+      let statusBadge = '';
+      if (order.order_status === 'pending') {
+        statusBadge = '<span class="badge-status" style="background: rgba(245,158,11,0.2); color: var(--accent-amber);">⏳ Pending Kitchen</span>';
+      } else if (order.order_status === 'preparing') {
+        statusBadge = '<span class="badge-status" style="background: rgba(6,182,212,0.2); color: var(--accent-cyan);">🍳 In Preparation</span>';
+      } else if (order.order_status === 'ready') {
+        statusBadge = '<span class="badge-status" style="background: rgba(16,185,129,0.25); color: var(--accent-emerald); font-weight: 800; animation: pulse 1.5s infinite;">🔔 Ready at Counter!</span>';
+      } else if (order.order_status === 'completed') {
+        statusBadge = '<span class="badge-status" style="background: rgba(255,255,255,0.08); color: var(--text-muted);">✓ Completed</span>';
+      } else {
+        statusBadge = '<span class="badge-status" style="background: rgba(244,63,94,0.2); color: var(--accent-rose);">Cancelled</span>';
+      }
+
+      const itemsHtml = (order.items || []).map(it => `
+        <div style="display: flex; justify-content: space-between; font-size: 0.88rem; color: #e2e8f0; padding: 0.2rem 0;">
+          <span>${it.quantity}x ${it.item_name}</span>
+          <span style="font-weight: 600;">₹${(it.subtotal || (it.unit_price * it.quantity)).toFixed(2)}</span>
+        </div>
+      `).join('');
+
+      return `
+        <div class="kds-card" style="padding: 1.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; border-bottom: 1px solid var(--border-glass); padding-bottom: 0.8rem;">
+            <div>
+              <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Token</span>
+              <div style="font-family: var(--font-heading); font-size: 1.8rem; font-weight: 900; color: var(--accent-amber);">${order.token_number}</div>
+              <div style="font-size: 0.8rem; color: var(--text-secondary);">Ref: ${order.order_number} • ${new Date(order.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+            </div>
+            <div style="text-align: right;">
+              ${statusBadge}
+              <div style="margin-top: 0.5rem;">
+                <button class="diet-tag-btn" onclick='showReceiptFromOrder(${JSON.stringify(order)})' style="font-size: 0.8rem;">
+                  🖨️ View Token Slip
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-bottom: 0.8rem;">
+            ${itemsHtml}
+          </div>
+
+          ${order.special_instructions ? `<div class="kds-note">Note: "${order.special_instructions}"</div>` : ''}
+
+          <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-glass); padding-top: 0.8rem; font-size: 0.95rem;">
+            <span style="color: var(--text-secondary);">Total Amount</span>
+            <span style="font-family: var(--font-heading); font-size: 1.25rem; font-weight: 800; color: #fff;">₹${parseFloat(order.final_amount).toFixed(2)}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+  } catch (err) {
+    console.error(err);
+    container.innerHTML = '<div style="color: var(--accent-rose); text-align: center;">Failed to load order history.</div>';
+  }
+}
+
+function showReceiptFromOrder(order) {
+  const modal = document.getElementById('token-modal');
+  document.getElementById('receipt-token-num').textContent = order.token_number;
+  document.getElementById('receipt-order-ref').textContent = order.order_number;
+  document.getElementById('receipt-customer-name').textContent = order.user_name || 'Campus Student';
+  document.getElementById('receipt-date-time').textContent = new Date(order.created_at).toLocaleString();
+  document.getElementById('receipt-total-price').textContent = `₹${parseFloat(order.final_amount).toFixed(2)}`;
+
+  const body = document.getElementById('receipt-items-body');
+  body.innerHTML = (order.items || []).map(it => `
+    <tr>
+      <td>${it.item_name}</td>
+      <td style="text-align: center;">${it.quantity}</td>
+      <td style="text-align: right;">₹${(it.subtotal || (it.unit_price * it.quantity)).toFixed(2)}</td>
+    </tr>
+  `).join('');
+
+  modal.classList.add('open');
+}
+</script>
+{% endblock %}
