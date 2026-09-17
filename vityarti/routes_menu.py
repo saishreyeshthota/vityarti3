@@ -6,7 +6,7 @@ and administrator CRUD operations.
 
 from datetime import datetime
 from flask import Blueprint, request, jsonify
-from database import get_db_connection
+from database import get_db_connection, FALLBACK_MENU_ITEMS
 from auth import login_required, role_required
 from models import MenuItem
 
@@ -53,6 +53,9 @@ def get_menu_items():
     conn.close()
 
     items = [dict(r) for r in rows]
+    if not items and category == "all" and dietary == "all" and not search_query:
+        items = FALLBACK_MENU_ITEMS
+
     return jsonify({"success": True, "count": len(items), "items": items})
 
 

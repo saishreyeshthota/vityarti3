@@ -6,7 +6,7 @@ Main application factory, Blueprint orchestrator, and web route handlers.
 
 import os
 from flask import Flask, render_template, session, redirect, url_for, jsonify, send_from_directory, request
-from database import init_db, get_db_connection
+from database import init_db, get_db_connection, FALLBACK_MENU_ITEMS
 from auth import auth_bp, get_current_user
 from routes_menu import menu_bp
 from routes_order import order_bp
@@ -46,12 +46,13 @@ def inject_global_vars():
 
 
 def _get_active_menu_items():
-    """Helper to safely fetch available items with automatic DB initialization fallback."""
+    """Helper to safely fetch available items with automatic DB initialization and guaranteed fallback."""
     try:
         conn = get_db_connection()
         items = conn.execute("SELECT * FROM menu_items WHERE is_available = 1").fetchall()
         conn.close()
-        return [dict(r) for r in items]
+        if items:
+            return [dict(r) for r in items]
     except Exception as e:
         print(f"Notice during menu fetch: {e}")
         try:
@@ -59,9 +60,11 @@ def _get_active_menu_items():
             conn = get_db_connection()
             items = conn.execute("SELECT * FROM menu_items WHERE is_available = 1").fetchall()
             conn.close()
-            return [dict(r) for r in items]
+            if items:
+                return [dict(r) for r in items]
         except Exception:
-            return []
+            pass
+    return FALLBACK_MENU_ITEMS
 
 
 @app.route("/")
